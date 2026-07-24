@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOL — prototype</title>
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    background: #000;
+    overflow: hidden;
+    height: 100%;
+    cursor: ;
+  }
+  canvas { display: block; position: fixed; inset: 0; }
+
+  #timer {
+    position: fixed;
+    left: 50%; top: 50%;
+    transform: translateX(-50%);
+    font: 15px/1 "Arial Narrow", Arial, sans-serif;
+    color: #2d2d2d;
+    letter-spacing: 0.06em;
+    Background: rgba(227, 227, 227, 0.9);
+    padding: 0px 10px;
+    z-index: 5;
+    font-variant-numeric: tabular-nums;
+    mix-blend-mode: difference;
+    pointer-events: none;
+  }
+
+  #footer {
+    position: fixed;
+    left: 20px; right: 20px; bottom: 20px;
+    font: 13px/1.35 "Arial Narrow", Helvetica, Arial, sans-serif;
+    line-height: 1;
+    color: #8a8a8a;
+    z-index: 5;
+    max-width: 375px;
+  }
+  #footer a { color: #8a8a8a; }
+
+  #scrub {
+    position: fixed;
+    left: 50%; bottom: 90px;
+    transform: translateX(-50%);
+    width: min(480px, 70vw);
+    display: none;
+    z-index: 10;
+  }
+  #scrub.visible { display: block; }
+  #scrub input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none; appearance: none;
+    background: transparent; height: 20px;
+  }
+  #scrub input[type="range"]::-webkit-slider-runnable-track {
+    height: 1px; background: rgba(255,255,255,0.25);
+  }
+  #scrub input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #fff; margin-top: -4px;
+  }
+  #scrub .marker {
+    position: absolute; top: 6px;
+    width: 1px; height: 8px;
+    background: rgba(255,255,255,0.7);
+    pointer-events: none;
+  }
+  #scrub .label {
+    font: 10px/1 "Arial Narrow", monospace;
+    color: rgba(255,255,255,0.4);
+    text-align: center;
+    margin-top: 8px;
+    letter-spacing: 0.15em;
+  }
+
+  #loader {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    opacity: 1;
+    overflow: hidden;
+    transition: opacity 0.75s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  #loader.hide {
+    opacity: 0;
+    pointer-events: none;
+  }
+  #loader img {
+    width: min(140px, 32vw);
+    height: auto;
+    filter: invert(1);
+    animation: stopRotate 2s steps(6) infinite;
+  }
+  @keyframes stopRotate {
+    to { transform: rotate(720deg); }
+  }
+  /* hårdt filmkorn ovenpå loaderen, som solens noir-gryn */
+  #loader::after {
+    content: "";
+    position: absolute;
+    inset: -20%;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 160px 160px;
+    filter: grayscale(1) contrast(1.7);
+    opacity: 0.65;
+    mix-blend-mode: overlay;
+    animation: grainFlicker 0.6s steps(1) infinite;
+    pointer-events: none;
+  }
+  @keyframes grainFlicker {
+    0%   { transform: translate(0%, 0%); }
+    10%  { transform: translate(-8%, 4%); }
+    20%  { transform: translate(6%, -5%); }
+    30%  { transform: translate(-4%, -7%); }
+    40%  { transform: translate(9%, 3%); }
+    50%  { transform: translate(-6%, 8%); }
+    60%  { transform: translate(3%, -9%); }
+    70%  { transform: translate(-9%, -2%); }
+    80%  { transform: translate(5%, 6%); }
+    90%  { transform: translate(-3%, -4%); }
+    100% { transform: translate(0%, 0%); }
+  }
+
+  /* faldende figur ved klik — floater langsomt gennem billedet (lav gravitation).
+     OBS: ingen wrapper-div — position:fixed skaber sin egen stacking context,
+     så mix-blend-mode på et barn kun blender lokalt (deraf den grå "boks" og
+     manglende inversion før). Blend-mode + grain-filter sidder derfor direkte
+     på selve <img>, ligesom #timer gør det. */
+  .falling-figure {
+    position: fixed;
+    top: -20vh;
+    width: 42px;
+    pointer-events: none;
+    z-index: 6;
+    display: block;
+    mix-blend-mode: difference;
+    filter: url(#figureGrain);
+    transform: translate(-50%, -50%) scale(var(--scale, 1)) rotate(0deg);
+    animation: figureFloat var(--dur, 5.5s) linear forwards;
+  }
+  @keyframes figureFloat {
+    from { top: -20vh; transform: translate(-50%, -50%) scale(var(--scale, 1)) rotate(0deg); }
+    to   { top: 120vh; transform: translate(-50%, -50%) scale(var(--scale, 1)) rotate(var(--rot, 0deg)); }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="figureGrain" x="-20%" y="-20%" width="140%" height="140%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="noise">
+      <animate attributeName="seed" values="1;9;3;14;6;11;2;8" dur="0.5s" repeatCount="indefinite" calcMode="discrete"/>
+    </feTurbulence>
+    <feColorMatrix in="noise" type="matrix"
+      values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.33 0.33 0 0" result="grainAlpha"/>
+    <feComposite in="grainAlpha" in2="SourceAlpha" operator="in" result="grainOnShape"/>
+    <feMerge>
+      <feMergeNode in="SourceGraphic"/>
+      <feMergeNode in="grainOnShape"/>
+    </feMerge>
+  </filter>
+</svg>
+
+<div id="loader"><img src="Mask group.png" alt=""></div>
+
+<div id="timer">--:--:--</div>
+
+<div id="footer">
+  Klik 'T' for at fjerne/vække tids-slideren.
+  <a href="#">Terms</a>
+</div>
+
+<div id="scrub">
+  <input type="range" id="timeSlider" min="0" max="1439" step="1">
+  <div class="label" id="timeLabel">--:--</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
+<script>
+/* =========================================================
+   SOL — v2.1
+   Sort/hvid. Stor sol, centreret i x, vandrer i y efter
+   den reale solhøjde. Horisontal refraktion (bånd),
+   blød kant (blur) + kromatisk aberration. Hårdt noir-gryn.
+   Tryk T for real-tid (skjuler slideren).
+   ========================================================= */
+
+let LAT = 55.27, LNG = 9.90; // fallback: Assens
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(
+    p => { LAT = p.coords.latitude; LNG = p.coords.longitude; },
+    () => {}, { timeout: 3000 }
+  );
+}
+
+// ---------- loader ----------
+// Midlertidigt loading-asset. Vises i en fast, kort varighed (attention span),
+// ikke ved at vente på faktisk netværks-load — falmer så over i solnedgangen.
+const loader = document.getElementById('loader');
+setTimeout(() => loader.classList.add('hide'), 1300);
+loader.addEventListener('transitionend', () => loader.remove());
+
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+// gl_FragCoord er i drawing-buffer-pixels, ikke CSS-pixels.
+// uRes skal derfor være buffer-størrelsen, ellers forskydes centrum.
+function bufferSize() {
+  const v = new THREE.Vector2();
+  renderer.getDrawingBufferSize(v);
+  return v;
+}
+
+const uniforms = {
+  uTime:     { value: 0 },
+  uRes:      { value: bufferSize() },
+  uSunY:     { value: 0.1 },
+  uAltitude: { value: 0.3 },
+  uCursor:   { value: new THREE.Vector2(10, 10) },
+  uEnergy:   { value: 0 },
+  uMotion:   { value: reducedMotion ? 0.2 : 1.0 },
+  uBlur:     { value: 0 },  // kantblødhed
+  uChroma:   { value: 0.005 },   // kromatisk aberration (0 = rent sort/hvid)
+  uGrain:    { value: 0.1 },  // hårdt noir-gryn, styrke
+  uGrainScale: { value: 60.0 }, // hårdt gryn, flimmerhastighed
+  uGrain2:   { value: 0.05 },  // blødt gryn, styrke
+  uGrain2Scale: { value: 0.35 }, // blødt gryn, størrelse
+};
+
+const frag = `
+precision highp float;
+
+uniform float uTime;
+uniform vec2  uRes;
+uniform float uSunY;
+uniform float uAltitude;
+uniform vec2  uCursor;
+uniform float uEnergy;
+uniform float uMotion;
+uniform float uBlur;
+uniform float uChroma;
+uniform float uGrain;
+uniform float uGrainScale;
+uniform float uGrain2;
+uniform float uGrain2Scale;
+
+float hash(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash(i);
+  float b = hash(i + vec2(1.0, 0.0));
+  float c = hash(i + vec2(0.0, 1.0));
+  float d = hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 4; i++) {
+    v += a * noise(p);
+    p = p * 2.15 + vec2(3.7, 1.3);
+    a *= 0.5;
+  }
+  return v;
+}
+
+// horisontal forskydning, primært funktion af y -> bånd
+float hWarp(float y, float t, float freq, float speed) {
+  return fbm(vec2(y * freq, t * speed)) - 0.5;
+}
+
+// disc-sample med "mock mirage"-silhuet: nær horisonten smelter solens
+// direkte billede sammen med et omvendt spejlbillede (rigtig atmosfærisk
+// refraktion), hvilket skaber et indsnøret "talje" lidt over midten og
+// en bred flaring nederst — champignon-formen man ser i virkelige fotos.
+float discFlat(vec2 p, vec2 c, float rx, float ry, float soft, float pinch, float flare) {
+  vec2 d = p - c;
+  float ny = d.y / ry;                 // ~ -1 (bund) .. 1 (top)
+  float widthMod = 1.0
+    + flare * exp(-pow((ny + 1.0) * 3.2, 2.0))   // flaring lige over horisonten
+    - pinch * exp(-pow((ny + 0.5) * 4.0, 2.0));  // talje lidt højere oppe
+  d.x /= rx * max(widthMod, 0.15);
+  d.y /= ry;
+  float dist = length(d);
+  float s = soft / mix(rx, ry, 0.5);
+  return 1.0 - smoothstep(1.0 - s, 1.0 + s, dist);
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy - 0.5 * uRes) / min(uRes.x, uRes.y);
+  float t = uTime * uMotion;
+
+  // ---- cursor-felt ----
+  float cd = length(uv - uCursor);
+  float cursorField = exp(-cd * cd * 7.0);
+  float amp = 0.035
+            + uEnergy * 0.08
+            + uEnergy * cursorField * 0.22;
+
+  // ---- horisontal refraktion: tre bånd-lag ----
+  float w1 = hWarp(uv.y,        t, 9.0,  0.35);
+  float w2 = hWarp(uv.y + 7.3,  t, 27.0, 0.60) * 0.50;
+  float w3 = hWarp(uv.y + 2.1,  t, 90.0, 1.10) * 0.22;
+  float dx = (w1 + w2 + w3) * amp;
+
+  vec2 sunPos = vec2(0.0, uSunY);
+  float radius = 0.294;
+
+  // ---- horisont-fladtrykning ----
+  // jo tættere solen er på horisonten (uAltitude ~ 0), jo mere flad og bred
+  // bliver skiven — som en rigtig solnedgang, ikke en cirkel der bare dykker.
+  float flatten = exp(-abs(uAltitude) * 6.0);
+  float radiusX = radius * (1.0 + flatten * 0.28);
+  float radiusY = radius * (1.0 - flatten * 0.70);
+  float pinch = flatten * 0.7;
+  float flare = flatten * 1.15;
+
+  // kantblødhed vokser med refraktionen -> blurren "ånder"
+  float soft = uBlur + amp * 0.9 + uEnergy * cursorField * 0.09;
+
+  // ---- kromatisk aberration: kanalerne refrakteres forskelligt ----
+  float ca = uChroma * (0.020 + amp * 0.55);
+  float R = 0.0, G = 0.0, B = 0.0;
+
+  // 5 samples pr. kanal, spredt langs x -> ægte horisontal blur
+  for (int i = 0; i < 5; i++) {
+    float f = (float(i) - 2.0) / 2.0;          // -1 .. 1
+    float jitter = f * soft * 0.85;
+    R += discFlat(vec2(uv.x + dx + ca + jitter, uv.y), sunPos, radiusX, radiusY, soft, pinch, flare);
+    G += discFlat(vec2(uv.x + dx      + jitter, uv.y), sunPos, radiusX, radiusY, soft, pinch, flare);
+    B += discFlat(vec2(uv.x + dx - ca + jitter, uv.y), sunPos, radiusX, radiusY, soft, pinch, flare);
+  }
+  R /= 5.0; G /= 5.0; B /= 5.0;
+
+  // ---- lysstyrke efter solhøjde ----
+  float dayness  = smoothstep(0.0, 0.4, uAltitude);
+  float duskness = smoothstep(0.1, -0.15, uAltitude);
+  float sunLum = mix(0.62, 0.88, dayness);
+  sunLum = mix(sunLum, 0.30, duskness * 0.8);
+
+  vec3 col = vec3(R, G, B) * sunLum;
+
+  // svag ydre glød så kanten smelter i mørket
+  vec2 gd = vec2(uv.x + dx, uv.y) - sunPos;
+  gd.x /= radiusX; gd.y /= radiusY;
+  float g0 = exp(-pow(max(length(gd) - 1.0, 0.0), 1.3) / (0.13 / mix(radiusX, radiusY, 0.5)));
+  col += g0 * 0.10 * sunLum;
+
+  col += 0.012; // bundtone
+
+  // ---- hårdt noir-gryn (samme korn på alle kanaler) ----
+  float g = hash(gl_FragCoord.xy + fract(t * uGrainScale) * vec2(17.0, 113.0)) - 0.5;
+  g = sign(g) * pow(abs(g) * 2.0, 1.6) * 0.5;
+  col += g * uGrain;
+
+  float g2 = noise(gl_FragCoord.xy * uGrain2Scale + fract(t * 24.0) * 100.0) - 0.5;
+  col += g2 * uGrain2;
+
+  // ---- noir-kontrast ----
+  col = clamp(col, 0.0, 1.0);
+  col = smoothstep(vec3(0.04), vec3(0.96), col);
+  col = floor(col * 28.0 + 0.5) / 28.0;
+
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+const vert = `void main() { gl_Position = vec4(position, 1.0); }`;
+
+scene.add(new THREE.Mesh(
+  new THREE.PlaneGeometry(2, 2),
+  new THREE.ShaderMaterial({ uniforms, fragmentShader: frag, vertexShader: vert })
+));
+
+// ---------- cursor ----------
+let lastMouse = null, energy = 0;
+window.addEventListener('pointermove', (e) => {
+  const m = Math.min(window.innerWidth, window.innerHeight);
+  uniforms.uCursor.value.set(
+    (e.clientX - window.innerWidth / 2) / m,
+    -(e.clientY - window.innerHeight / 2) / m
+  );
+  if (lastMouse) energy = Math.min(1, energy + Math.hypot(e.clientX - lastMouse.x, e.clientY - lastMouse.y) * 0.0005);
+  lastMouse = { x: e.clientX, y: e.clientY };
+});
+window.addEventListener('touchmove', (e) => {
+  const tch = e.touches[0], m = Math.min(window.innerWidth, window.innerHeight);
+  uniforms.uCursor.value.set(
+    (tch.clientX - window.innerWidth / 2) / m,
+    -(tch.clientY - window.innerHeight / 2) / m
+  );
+  energy = Math.min(1, energy + 0.03);
+}, { passive: true });
+
+// ---------- floatende figur ved klik ----------
+// Floater langsomt (lav gravitation) lige gennem billedet, forbi solen,
+// og til sidst helt ud af skærmen — inverteres (difference-blend) hele vejen.
+window.addEventListener('click', () => {
+  const x = window.innerWidth / 2
+          + (Math.random() * 2 - 1) * window.innerWidth * 0.2; // spredning om solen
+
+  const img = document.createElement('img');
+  img.className = 'falling-figure';
+  img.src = 'figure.png';
+  img.alt = '';
+  img.style.left = x + 'px';
+  img.style.setProperty('--rot', (Math.random() * 140 - 70) + 'deg');
+  img.style.setProperty('--scale', (0.55 + Math.random() * 0.9).toFixed(2));
+  img.style.setProperty('--dur', (5.0 + Math.random() * 2.5).toFixed(2) + 's');
+
+  document.body.appendChild(img);
+  img.addEventListener('animationend', () => img.remove());
+});
+
+// ---------- sol + nedtælling ----------
+let scrubMode = true;
+const slider  = document.getElementById('timeSlider');
+const label   = document.getElementById('timeLabel');
+const timerEl = document.getElementById('timer');
+const scrub   = document.getElementById('scrub');
+
+function currentDate() {
+  if (!scrubMode) return new Date();
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setMinutes(parseInt(slider.value, 10));
+  return d;
+}
+function fmt(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return String(Math.floor(s / 3600)).padStart(2, '0') + ':' +
+         String(Math.floor((s % 3600) / 60)).padStart(2, '0') + ':' +
+         String(s % 60).padStart(2, '0');
+}
+
+function updateSun() {
+  const d = currentDate();
+  const alt = SunCalc.getPosition(d, LAT, LNG).altitude;
+  uniforms.uAltitude.value = alt;
+
+  // banen skaleres efter formatet. OBS: skiven fladtrykkes optisk nær
+  // horisonten (se flatten/radiusY i shaderen), så vi kan ikke bruge den
+  // fulde radius (0.42) som "forsvindingspunkt" — så ville den mest flade,
+  // champignon-formede sol allerede være helt under kanten ved alt=0.
+  const halfH = (window.innerHeight / Math.min(window.innerWidth, window.innerHeight)) / 2;
+  const horizon = -halfH;
+  uniforms.uSunY.value = horizon + Math.sin(alt) * (halfH * 1.5 + 0.294);
+
+  const times = SunCalc.getTimes(d, LAT, LNG);
+  const target = alt > 0
+    ? (times.sunset  > d ? times.sunset  : SunCalc.getTimes(new Date(+d + 864e5), LAT, LNG).sunset)
+    : (times.sunrise > d ? times.sunrise : SunCalc.getTimes(new Date(+d + 864e5), LAT, LNG).sunrise);
+  timerEl.textContent = fmt(target - d);
+}
+
+scrub.classList.add('visible');
+const now = new Date();
+slider.value = now.getHours() * 60 + now.getMinutes();
+function updateLabel() {
+  const m = parseInt(slider.value, 10);
+  label.textContent = String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+}
+updateLabel();
+slider.addEventListener('input', updateLabel);
+window.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() === 't') {
+    scrubMode = !scrubMode;
+    scrub.classList.toggle('visible', scrubMode);
+  }
+});
+setTimeout(() => {
+  const times = SunCalc.getTimes(new Date(), LAT, LNG);
+  [times.sunrise, times.sunset].forEach(d => {
+    const el = document.createElement('div');
+    el.className = 'marker';
+    el.style.left = ((d.getHours() * 60 + d.getMinutes()) / 1439 * 100) + '%';
+    scrub.appendChild(el);
+  });
+}, 500);
+
+// ---------- loop ----------
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  uniforms.uTime.value = clock.getElapsedTime();
+  energy *= 0.74;
+  uniforms.uEnergy.value += (energy - uniforms.uEnergy.value) * 0.1;
+  updateSun();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  uniforms.uRes.value.copy(bufferSize());
+});
+</script>
+</body>
+</html>
