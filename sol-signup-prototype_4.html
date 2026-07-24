@@ -3,7 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SOL — prototype</title>
+<title>SOL prototype</title>
+<!-- Arial Narrow er ikke installeret på alle enheder (mac/linux/mobil) —
+     Roboto Condensed er visuelt tæt på og bruges som fallback i alle font-stacks. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&display=swap" rel="stylesheet">
 <style>
   html, body {
     margin: 0; padding: 0;
@@ -11,15 +16,21 @@
     overflow: hidden;
     height: 100%;
     cursor: ;
+    transition: background-color 1.8s ease;
   }
-  canvas { display: block; position: fixed; inset: 0; }
+  /* tilmelding åben: baggrunden falmer til hvid. Solen (og resten af scenen)
+     bruger difference-blend mod den — mod sort er det identisk (ingen
+     effekt), så det er "gratis" resten af tiden og aktiveres kun her. */
+  body.signup-open { background: #fff; }
+  canvas { display: block; position: fixed; inset: 0; mix-blend-mode: difference; }
 
   #timer {
     position: fixed;
     left: 50%; top: 50%;
-    transform: translateX(-50%);
-    font: 15px/1 "Arial Narrow", Arial, sans-serif;
+    transform: translate(-50%, -50%);
+    font: 15px/1 "Arial Narrow", "Roboto Condensed",Arial, sans-serif;
     color: #2d2d2d;
+    -webkit-text-stroke: 1px currentColor;
     letter-spacing: 0.06em;
     Background: rgba(227, 227, 227, 0.9);
     padding: 0px 10px;
@@ -32,7 +43,7 @@
   #footer {
     position: fixed;
     left: 20px; right: 20px; bottom: 20px;
-    font: 13px/1.35 "Arial Narrow", Helvetica, Arial, sans-serif;
+    font: 13px/1.35 "Arial Narrow", "Roboto Condensed",Helvetica, Arial, sans-serif;
     line-height: 1;
     color: #8a8a8a;
     z-index: 5;
@@ -45,14 +56,16 @@
     left: 50%; bottom: 90px;
     transform: translateX(-50%);
     width: min(480px, 70vw);
-    display: none;
+    display: block;
     z-index: 10;
+    filter: drop-shadow(0 0 8px rgba(0,0,0,0.9));
   }
-  #scrub.visible { display: block; }
+  #scrub.hidden { display: none; }
   #scrub input[type="range"] {
     width: 100%;
     -webkit-appearance: none; appearance: none;
     background: transparent; height: 20px;
+    drop-shadow: 0 0 8px rgba(0,0,0,0.9);
   }
   #scrub input[type="range"]::-webkit-slider-runnable-track {
     height: 1px; background: rgba(255,255,255,0.25);
@@ -67,13 +80,93 @@
     width: 1px; height: 8px;
     background: rgba(255,255,255,0.7);
     pointer-events: none;
+
   }
   #scrub .label {
-    font: 10px/1 "Arial Narrow", monospace;
+    font: 10px/1 "Arial Narrow", "Roboto Condensed",monospace;
     color: rgba(255,255,255,0.4);
     text-align: center;
     margin-top: 8px;
-    letter-spacing: 0.15em;
+    letter-spacing: 0em;
+  
+  }
+
+  #skipBtn {
+    position: fixed;
+    top: 20px; left: 20px;
+    z-index: 11;
+    height: 34px;
+    padding: 0 14px;
+    border-radius: 17px;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(0,0,0,0.4);
+    color: rgba(255,255,255,0.8);
+    font: 700 11px/34px "Arial Narrow", "Roboto Condensed",Arial, sans-serif;
+    letter-spacing: 0em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  #skipBtn.hidden { display: none; }
+
+  #scrubToggle {
+    position: fixed;
+    top: 64px; left: 20px;
+    z-index: 11;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(0,0,0,0.4);
+    color: rgba(255,255,255,0.8);
+    font: 700 12px/34px "Arial Narrow", "Roboto Condensed", Arial, sans-serif;
+    letter-spacing: 0.05em;
+    text-align: center;
+    cursor: pointer;
+    
+  }
+
+  #timer.fadeOut {
+    transition: opacity 0.6s ease;
+    opacity: 0;
+  }
+
+  #signup {
+    position: fixed;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 7;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 1s ease;
+  }
+  #signup.visible { opacity: 1; pointer-events: auto; }
+  .signup-bar {
+    display: flex;
+  }
+  .signup-bar input {
+    flex: 1;
+    min-width: 160px;
+    border: none;
+    outline: none;
+    background: #000;
+    color: #fff;
+    font: 700 15px/1 "Arial Narrow", "Roboto Condensed",Arial, sans-serif;
+    -webkit-text-stroke: 0.1px currentColor;
+    text-transform: uppercase;
+    letter-spacing: 0em;
+    padding: 2px 6px;
+  }
+  .signup-bar input::placeholder { color: #fff; opacity: 1; }
+  .signup-bar button {
+    border: 1.5px solid #000;
+    border-left: none;
+    background: #fff;
+    color: #000;
+    font: 700 15px/1 "Arial Narrow", "Roboto Condensed",Arial, sans-serif;
+    -webkit-text-stroke: 0.1px currentColor;
+    text-transform: uppercase;
+    letter-spacing: 0em;
+    padding: 2px 6px;
+    cursor: pointer;
   }
 
   #loader {
@@ -137,13 +230,22 @@
     position: fixed;
     top: -20vh;
     width: 42px;
-    pointer-events: none;
+    padding: 16px; /* større usynlig hit-box, så man kan ramme ved siden af */
+    box-sizing: content-box;
+    pointer-events: auto;
+    touch-action: none;
+    -webkit-user-drag: none;
+    user-select: none;
+    -webkit-touch-callout: none;
     z-index: 6;
     display: block;
     mix-blend-mode: difference;
     filter: url(#figureGrain);
     transform: translate(-50%, -50%) scale(var(--scale, 1)) rotate(0deg);
     animation: figureFloat var(--dur, 5.5s) linear forwards;
+  }
+  .falling-figure.grabbed {
+    z-index: 8;
   }
   @keyframes figureFloat {
     from { top: -20vh; transform: translate(-50%, -50%) scale(var(--scale, 1)) rotate(0deg); }
@@ -172,10 +274,20 @@
 
 <div id="timer">--:--:--</div>
 
+<div id="signup">
+  <form class="signup-bar">
+    <input type="email" id="signupEmail" placeholder="EMAIL" required>
+    <button type="submit">Tilmeld</button>
+  </form>
+</div>
+
 <div id="footer">
-  Klik 'T' for at fjerne/vække tids-slideren.
+  Tryk 'T' for at skifte mellem realtid og scrub-tid.
   <a href="#">Terms</a>
 </div>
+
+<button id="skipBtn">Skip</button>
+<button id="scrubToggle" aria-label="Skift mellem realtid og scrub-tid">T</button>
 
 <div id="scrub">
   <input type="range" id="timeSlider" min="0" max="1439" step="1">
@@ -190,7 +302,7 @@
    Sort/hvid. Stor sol, centreret i x, vandrer i y efter
    den reale solhøjde. Horisontal refraktion (bånd),
    blød kant (blur) + kromatisk aberration. Hårdt noir-gryn.
-   Tryk T for real-tid (skjuler slideren).
+   Tryk T for real-tid/scrub-tid. Slideren er altid synlig.
    ========================================================= */
 
 let LAT = 55.27, LNG = 9.90; // fallback: Assens
@@ -205,7 +317,7 @@ if (navigator.geolocation) {
 // Midlertidigt loading-asset. Vises i en fast, kort varighed (attention span),
 // ikke ved at vente på faktisk netværks-load — falmer så over i solnedgangen.
 const loader = document.getElementById('loader');
-setTimeout(() => loader.classList.add('hide'), 1300);
+setTimeout(() => loader.classList.add('hide'), 2000);
 loader.addEventListener('transitionend', () => loader.remove());
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -226,6 +338,11 @@ function bufferSize() {
   return v;
 }
 
+// på mobil skal solen være en del større — fylder næsten hele bredden
+function sunRadius() {
+  return window.innerWidth < 700 ? 0.46 : 0.294;
+}
+
 const uniforms = {
   uTime:     { value: 0 },
   uRes:      { value: bufferSize() },
@@ -234,6 +351,7 @@ const uniforms = {
   uCursor:   { value: new THREE.Vector2(10, 10) },
   uEnergy:   { value: 0 },
   uMotion:   { value: reducedMotion ? 0.2 : 1.0 },
+  uRadius:   { value: sunRadius() }, // solens grundradius — større på mobil
   uBlur:     { value: 0 },  // kantblødhed
   uChroma:   { value: 0.005 },   // kromatisk aberration (0 = rent sort/hvid)
   uGrain:    { value: 0.1 },  // hårdt noir-gryn, styrke
@@ -252,6 +370,7 @@ uniform float uAltitude;
 uniform vec2  uCursor;
 uniform float uEnergy;
 uniform float uMotion;
+uniform float uRadius;
 uniform float uBlur;
 uniform float uChroma;
 uniform float uGrain;
@@ -327,7 +446,7 @@ void main() {
   float dx = (w1 + w2 + w3) * amp;
 
   vec2 sunPos = vec2(0.0, uSunY);
-  float radius = 0.294;
+  float radius = uRadius;
 
   // ---- horisont-fladtrykning ----
   // jo tættere solen er på horisonten (uAltitude ~ 0), jo mere flad og bred
@@ -359,7 +478,10 @@ void main() {
   float dayness  = smoothstep(0.0, 0.4, uAltitude);
   float duskness = smoothstep(0.1, -0.15, uAltitude);
   float sunLum = mix(0.62, 0.88, dayness);
-  sunLum = mix(sunLum, 0.30, duskness * 0.8);
+  // efter solnedgang bliver baggrunden hvid, og hele scenen difference-blendes
+  // mod den (se canvas' mix-blend-mode) — så solen skal være LYS her (tæt på 1),
+  // for at den bliver MØRK efter inversionen (1.0 - lum), i stedet for grå.
+  sunLum = mix(sunLum, 0.92, duskness * 0.8);
 
   vec3 col = vec3(R, G, B) * sunLum;
 
@@ -415,25 +537,97 @@ window.addEventListener('touchmove', (e) => {
   energy = Math.min(1, energy + 0.03);
 }, { passive: true });
 
-// ---------- floatende figur ved klik ----------
+// ---------- floatende figur ved klik/tap ----------
 // Floater langsomt (lav gravitation) lige gennem billedet, forbi solen,
 // og til sidst helt ud af skærmen — inverteres (difference-blend) hele vejen.
-window.addEventListener('click', () => {
+// Maks. én figur pr. 1.5 sek, og ikke når man rammer slideren/knappen/linket.
+const FIGURE_COOLDOWN = 1500;
+const FIGURE_MIN_SCALE = 0.55; // mindste størrelse (× 42px grundbredde)
+const FIGURE_MAX_SCALE = 0.8; // største størrelse
+let lastFigureSpawn = 0;
+
+function spawnFigure() {
+  const now = performance.now();
+  if (now - lastFigureSpawn < FIGURE_COOLDOWN) return;
+  lastFigureSpawn = now;
+
   const x = window.innerWidth / 2
           + (Math.random() * 2 - 1) * window.innerWidth * 0.2; // spredning om solen
+  const scale = FIGURE_MIN_SCALE + Math.random() * (FIGURE_MAX_SCALE - FIGURE_MIN_SCALE);
 
   const img = document.createElement('img');
   img.className = 'falling-figure';
   img.src = 'figure.png';
   img.alt = '';
+  img.draggable = false; // ellers starter browseren nogle gange sin egen native "træk billedet"
+  img.addEventListener('dragstart', (e) => e.preventDefault());
   img.style.left = x + 'px';
   img.style.setProperty('--rot', (Math.random() * 140 - 70) + 'deg');
-  img.style.setProperty('--scale', (0.55 + Math.random() * 0.9).toFixed(2));
+  img.style.setProperty('--scale', scale.toFixed(2));
   img.style.setProperty('--dur', (5.0 + Math.random() * 2.5).toFixed(2) + 's');
 
   document.body.appendChild(img);
   img.addEventListener('animationend', () => img.remove());
-});
+  makeDraggable(img);
+}
+
+// ---------- fang og træk figurerne rundt ----------
+function makeDraggable(fig) {
+  fig.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    fig.setPointerCapture(e.pointerId);
+
+    // fastfrys den lige der hvor den blev grebet — ingen animation, ingen tvivl
+    const rect = fig.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const grabOffsetX = e.clientX - centerX;
+    const grabOffsetY = e.clientY - centerY;
+
+    fig.style.animation = 'none';
+    fig.style.transition = 'none';
+    fig.style.left = centerX + 'px';
+    fig.style.top = centerY + 'px';
+    fig.style.setProperty('--rot', '0deg');
+    fig.classList.add('grabbed');
+
+    function onMove(ev) {
+      fig.style.left = (ev.clientX - grabOffsetX) + 'px';
+      fig.style.top = (ev.clientY - grabOffsetY) + 'px';
+    }
+    function onUp() {
+      fig.removeEventListener('pointermove', onMove);
+      fig.removeEventListener('pointerup', onUp);
+      fig.removeEventListener('pointercancel', onUp);
+      fig.classList.remove('grabbed');
+
+      // sluppet fri igen — falder videre fra dér hvor den blev sluppet
+      const dropY = parseFloat(fig.style.top);
+      const fallDist = Math.max(200, window.innerHeight * 1.2 - dropY);
+      const dur = fallDist / 90; // ~samme hastighed som den oprindelige float
+
+      fig.style.transform = 'translate(-50%, -50%) scale(var(--scale, 1)) rotate(var(--rot, 0deg))';
+      fig.style.transition = `top ${dur}s linear, transform ${dur}s linear`;
+      // ét frame mellemrum, ellers slår browseren start- og slut-tilstand
+      // sammen og springer transitionen over
+      requestAnimationFrame(() => {
+        fig.style.setProperty('--rot', (Math.random() * 140 - 70) + 'deg');
+        fig.style.top = '120vh';
+      });
+      fig.addEventListener('transitionend', () => fig.remove(), { once: true });
+    }
+    fig.addEventListener('pointermove', onMove);
+    fig.addEventListener('pointerup', onUp);
+    fig.addEventListener('pointercancel', onUp);
+  });
+}
+
+function handleBackgroundTap(e) {
+  if (e.target.closest('#scrub, #skipBtn, #scrubToggle, #signup, #footer a, .falling-figure')) return;
+  spawnFigure();
+}
+window.addEventListener('click', handleBackgroundTap);
+window.addEventListener('touchend', handleBackgroundTap, { passive: true });
 
 // ---------- sol + nedtælling ----------
 let scrubMode = true;
@@ -467,16 +661,21 @@ function updateSun() {
   // champignon-formede sol allerede være helt under kanten ved alt=0.
   const halfH = (window.innerHeight / Math.min(window.innerWidth, window.innerHeight)) / 2;
   const horizon = -halfH;
-  uniforms.uSunY.value = horizon + Math.sin(alt) * (halfH * 1.5 + 0.294);
+  const sunY = horizon + Math.sin(alt) * (halfH * 1.5 + uniforms.uRadius.value);
+  // solen skal altid være en anelse synlig — selv ved sit laveste punkt
+  // (dybt om natten) skal toppen af skiven stikke lidt op over kanten.
+  const lowestY = -halfH - uniforms.uRadius.value * 0.25;
+  uniforms.uSunY.value = Math.max(sunY, lowestY);
 
   const times = SunCalc.getTimes(d, LAT, LNG);
   const target = alt > 0
     ? (times.sunset  > d ? times.sunset  : SunCalc.getTimes(new Date(+d + 864e5), LAT, LNG).sunset)
     : (times.sunrise > d ? times.sunrise : SunCalc.getTimes(new Date(+d + 864e5), LAT, LNG).sunrise);
   timerEl.textContent = fmt(target - d);
+
+  if (alt <= 0) openSignup(); else closeSignup();
 }
 
-scrub.classList.add('visible');
 const now = new Date();
 slider.value = now.getHours() * 60 + now.getMinutes();
 function updateLabel() {
@@ -485,12 +684,57 @@ function updateLabel() {
 }
 updateLabel();
 slider.addEventListener('input', updateLabel);
+
+// 'T' (eller knappen under Skip) fjerner/viser slideren og skifter
+// samtidig mellem manuel scrub-tid og reel realtid
+function toggleScrub() {
+  scrubMode = !scrubMode;
+  scrub.classList.toggle('hidden', !scrubMode);
+}
 window.addEventListener('keydown', (e) => {
-  if (e.key.toLowerCase() === 't') {
-    scrubMode = !scrubMode;
-    scrub.classList.toggle('visible', scrubMode);
-  }
+  if (e.key.toLowerCase() === 't') toggleScrub();
 });
+document.getElementById('scrubToggle').addEventListener('click', toggleScrub);
+
+// ---------- tilmelding åben efter solnedgang ----------
+// Reageret live af den faktiske/scrubbede soltid: så snart solen er under
+// horisonten (alt <= 0) falmer baggrunden til hvid og signup-baren vises —
+// og går man tilbage over horisonten igen (fx ved at trække slideren), lukker
+// den igen. Solens position fryses ikke — den følger bare den normale bane,
+// præcis som når man ellers ændrer tiden.
+const signup  = document.getElementById('signup');
+const skipBtn = document.getElementById('skipBtn');
+let signupOpen = false;
+
+function openSignup() {
+  if (signupOpen) return;
+  signupOpen = true;
+  document.body.classList.add('signup-open');
+  timerEl.classList.add('fadeOut');
+  setTimeout(() => signup.classList.add('visible'), 700);
+}
+function closeSignup() {
+  if (!signupOpen) return;
+  signupOpen = false;
+  document.body.classList.remove('signup-open');
+  timerEl.classList.remove('fadeOut');
+  signup.classList.remove('visible');
+}
+
+// bekvem genvej: hop tidspunktet til lige efter solnedgang på sliderens dag
+skipBtn.addEventListener('click', () => {
+  const times = SunCalc.getTimes(currentDate(), LAT, LNG);
+  scrubMode = true;
+  scrub.classList.remove('hidden');
+  slider.value = Math.min(1439, times.sunset.getHours() * 60 + times.sunset.getMinutes() + 2);
+  updateLabel();
+});
+
+document.querySelector('.signup-bar').addEventListener('submit', (e) => {
+  e.preventDefault();
+  // TODO: send e-mail til den rigtige tilmeldings-endpoint
+});
+
 setTimeout(() => {
   const times = SunCalc.getTimes(new Date(), LAT, LNG);
   [times.sunrise, times.sunset].forEach(d => {
@@ -506,7 +750,7 @@ const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   uniforms.uTime.value = clock.getElapsedTime();
-  energy *= 0.74;
+  energy *= 0.8;
   uniforms.uEnergy.value += (energy - uniforms.uEnergy.value) * 0.1;
   updateSun();
   renderer.render(scene, camera);
@@ -516,6 +760,7 @@ animate();
 window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   uniforms.uRes.value.copy(bufferSize());
+  uniforms.uRadius.value = sunRadius();
 });
 </script>
 </body>
