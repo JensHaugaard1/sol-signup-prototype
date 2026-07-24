@@ -4,8 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SOL prototype</title>
-<!-- Arial Narrow er ikke installeret på alle enheder (mac/linux/mobil) —
-     Roboto Condensed er visuelt tæt på og bruges som fallback i alle font-stacks. -->
+<!-- Arial Narrow findes ganske vist på iOS, men Safari renderer den grimt
+     (fake-smalnet almindelig Arial i stedet for et rigtigt kondenseret snit).
+     Roboto Condensed bruges derfor direkte i alle font-stacks i stedet. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&display=swap" rel="stylesheet">
@@ -28,22 +29,27 @@
     position: fixed;
     left: 50%; top: 50%;
     transform: translate(-50%, -50%);
-    font: 15px/1 "Arial Narrow", "Roboto Condensed",Arial, sans-serif;
+    font: 15px/1 "Roboto Condensed",Arial, sans-serif;
     color: #2d2d2d;
-    -webkit-text-stroke: 1px currentColor;
     letter-spacing: 0.06em;
-    Background: rgba(227, 227, 227, 0.9);
+    background: rgba(227, 227, 227, 0.9);
     padding: 0px 10px;
     z-index: 5;
     font-variant-numeric: tabular-nums;
-    mix-blend-mode: difference;
     pointer-events: none;
+    transition: color 0.3s ease, background-color 0.3s ease;
   }
+  /* boksen er altid der, men skifter farve (hårdt, ikke blendet) alt efter
+     hvad den sidder oven på — kun ved HELT overlap med solen (.on-sun,
+     sat i JS ud fra solens faktiske position+radius), ikke bare ved kanten. */
+  body.signup-open #timer { color: #eaeaea; background: rgba(20, 20, 20, 0.85); }
+  #timer.on-sun { color: #fff; background: #000; }
+  body.signup-open #timer.on-sun { color: #000; background: #fff; }
 
   #footer {
     position: fixed;
     left: 20px; right: 20px; bottom: 20px;
-    font: 13px/1.35 "Arial Narrow", "Roboto Condensed",Helvetica, Arial, sans-serif;
+    font: 13px/1.35 "Roboto Condensed",Helvetica, Arial, sans-serif;
     line-height: 1;
     color: #8a8a8a;
     z-index: 5;
@@ -83,7 +89,7 @@
 
   }
   #scrub .label {
-    font: 10px/1 "Arial Narrow", "Roboto Condensed",monospace;
+    font: 10px/1 "Roboto Condensed",monospace;
     color: rgba(255,255,255,0.4);
     text-align: center;
     margin-top: 8px;
@@ -97,11 +103,10 @@
     z-index: 11;
     height: 34px;
     padding: 0 14px;
-    border-radius: 17px;
     border: 1px solid rgba(255,255,255,0.35);
     background: rgba(0,0,0,0.4);
     color: rgba(255,255,255,0.8);
-    font: 700 11px/34px "Arial Narrow", "Roboto Condensed",Arial, sans-serif;
+    font: 700 11px/34px "Roboto Condensed",Arial, sans-serif;
     letter-spacing: 0em;
     text-transform: uppercase;
     cursor: pointer;
@@ -113,11 +118,10 @@
     top: 64px; left: 20px;
     z-index: 11;
     width: 34px; height: 34px;
-    border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.35);
     background: rgba(0,0,0,0.4);
     color: rgba(255,255,255,0.8);
-    font: 700 12px/34px "Arial Narrow", "Roboto Condensed", Arial, sans-serif;
+    font: 700 12px/34px "Roboto Condensed", Arial, sans-serif;
     letter-spacing: 0.05em;
     text-align: center;
     cursor: pointer;
@@ -149,7 +153,7 @@
     outline: none;
     background: #000;
     color: #fff;
-    font: 700 15px/1 "Arial Narrow", "Roboto Condensed",Arial, sans-serif;
+    font: 700 15px/1 "Roboto Condensed",Arial, sans-serif;
     -webkit-text-stroke: 0.1px currentColor;
     text-transform: uppercase;
     letter-spacing: 0em;
@@ -161,7 +165,7 @@
     border-left: none;
     background: #fff;
     color: #000;
-    font: 700 15px/1 "Arial Narrow", "Roboto Condensed",Arial, sans-serif;
+    font: 700 15px/1 "Roboto Condensed",Arial, sans-serif;
     -webkit-text-stroke: 0.1px currentColor;
     text-transform: uppercase;
     letter-spacing: 0em;
@@ -659,13 +663,25 @@ function updateSun() {
   // horisonten (se flatten/radiusY i shaderen), så vi kan ikke bruge den
   // fulde radius (0.42) som "forsvindingspunkt" — så ville den mest flade,
   // champignon-formede sol allerede være helt under kanten ved alt=0.
-  const halfH = (window.innerHeight / Math.min(window.innerWidth, window.innerHeight)) / 2;
+  const m = Math.min(window.innerWidth, window.innerHeight);
+  const halfH = (window.innerHeight / m) / 2;
   const horizon = -halfH;
   const sunY = horizon + Math.sin(alt) * (halfH * 1.5 + uniforms.uRadius.value);
   // solen skal altid være en anelse synlig — selv ved sit laveste punkt
   // (dybt om natten) skal toppen af skiven stikke lidt op over kanten.
   const lowestY = -halfH - uniforms.uRadius.value * 0.25;
   uniforms.uSunY.value = Math.max(sunY, lowestY);
+
+  // ---- timer solid, kun skift af farve når den er HELT inde i solen ----
+  // (ingen blend-mode — bare et hårdt skift, ikke ved kanten/delvist overlap)
+  const flatten = Math.exp(-Math.abs(alt) * 6.0);
+  const radiusX = uniforms.uRadius.value * (1 + flatten * 0.28);
+  const radiusY = uniforms.uRadius.value * (1 - flatten * 0.70);
+  const tRect = timerEl.getBoundingClientRect();
+  const tHalfW = (tRect.width  / 2) / m;
+  const tHalfH = (tRect.height / 2) / m;
+  const fullyOnSun = (tHalfH + Math.abs(uniforms.uSunY.value) <= radiusY) && (tHalfW <= radiusX);
+  timerEl.classList.toggle('on-sun', fullyOnSun);
 
   const times = SunCalc.getTimes(d, LAT, LNG);
   const target = alt > 0
